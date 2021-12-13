@@ -1,5 +1,9 @@
 #include <iostream>
+#include <rxcpp/rx.hpp>
 
 int main() {
-  std::cout << "hello" << std::endl;
+  rxcpp::observable<>::just("hello rxcpp test")
+  .subscribe([=](auto txt){
+    std::cout << txt << std::endl;
+  });
 }
