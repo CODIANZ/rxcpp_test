@@ -1,6 +1,7 @@
 #include <iostream>
 #include <rxcpp/rx.hpp>
 
+/* void的なもの */
 struct unit {};
 
 /** o を subscribe した後、 f() を呼び出す。 o が発行した値を観測可能な observable を返却する。 */
@@ -56,11 +57,15 @@ public:
   }
 };
 
+/** observe_on() でこいつを使う */
 rxcpp::observe_on_one_worker observe_on_async() {
   return rxcpp::observe_on_one_worker(rxcpp::schedulers::make_scheduler<async_scheduler>());
 }
 
-/** スコープの出入りをカウントする */
+/**
+ * スコープの出入りをカウントする
+ * 関数がどのタイミングで終了するかを確認するため
+ **/
 struct scope_counter {
   static std::atomic_int enter_;
   static std::atomic_int leave_;
@@ -73,6 +78,10 @@ struct scope_counter {
       <<  ", total enter: " << e
       << ", total leave: " << l
       << std::endl;
+  }
+  static void reset() {
+    enter_ = 0;
+    leave_ = 0;
   }
   int self_;
   scope_counter() : self_(enter_++) {
@@ -133,7 +142,8 @@ public:
   }
 };
 
-void test_1() {
+/** 繰り返しで retry() を使う */
+void test_1_1() {
   auto api = std::make_shared<some_api>(5);
 
   rxcpp::observable<>::just(unit{})
@@ -157,7 +167,132 @@ void test_1() {
   });
 }
 
-void test_1_1() {
+/** 繰り返しで never() を使う */
+void test_1_2() {
+  auto api = std::make_shared<some_api>(5);
+  auto sbj = rxcpp::subjects::subject<unit>();
+
+  ready_set_go([=](){
+    sbj.get_subscriber().on_next(unit{});
+  }, sbj.get_observable())
+  .flat_map([=](unit){
+    return api->call();
+  }).as_dynamic()
+  .flat_map([=](result x){
+    scope_counter sc;
+    if(x == result::failure){
+      sbj.get_subscriber().on_next(unit{});
+      return rxcpp::observable<>::never<unit>().as_dynamic();
+    }
+    else{
+      sbj.get_subscriber().on_completed();
+      return rxcpp::observable<>::just(unit{}).as_dynamic();
+    }
+  }).as_dynamic()
+  .subscribe([=](unit){
+    std::cout << "on next" << std::endl;
+  }, [=](std::exception_ptr){
+    std::cout << "on error" << std::endl;
+  }, [=](){
+    std::cout << "on complete" << std::endl;
+    scope_counter::dump();
+  });
+}
+
+/** 繰り返しで skip_while() を使う */
+void test_1_3() {
+  auto api = std::make_shared<some_api>(5);
+  auto sbj = rxcpp::subjects::behavior<unit>(unit{});
+
+  rxcpp::observable<>::range(0)
+  .zip(sbj.get_observable())
+  .flat_map([=](std::tuple<int, unit>){
+    return api->call();
+  }).as_dynamic()
+  .tap([=](result x){
+    if(x == result::failure){
+      sbj.get_subscriber().on_next(unit{});
+    }
+    else{
+      sbj.get_subscriber().on_completed();
+    }
+  })
+  .skip_while([=](result x){
+    return x == result::failure;
+  }).as_dynamic()
+  .take(1)
+  .subscribe([=](result){
+    std::cout << "on next" << std::endl;
+  }, [=](std::exception_ptr){
+    std::cout << "on error" << std::endl;
+  }, [=](){
+    std::cout << "on complete" << std::endl;
+    scope_counter::dump();
+  });
+}
+
+/** 繰り返しで observable を作成する */
+void test_1_4() {
+  auto api = std::make_shared<some_api>(5);
+  auto sbj = rxcpp::subjects::subject<unit>();
+
+  ready_set_go([=](){
+    sbj.get_subscriber().on_next(unit{});
+  }, sbj.get_observable())
+  .flat_map([=](unit){
+    return api->call();
+  }).as_dynamic()
+  .flat_map([=](result x){
+    return rxcpp::observable<>::create<unit>([=](rxcpp::subscriber<unit> s){
+      scope_counter sc;
+      if(x == result::failure){
+        sbj.get_subscriber().on_next(unit{});
+        s.on_completed(); /** 忘れがちなので要注意！ */
+      }
+      else {
+        s.on_next(unit{});
+        s.on_completed();
+        sbj.get_subscriber().on_completed();
+      }
+    });
+  }).as_dynamic()
+  .subscribe([=](unit){
+    std::cout << "on next" << std::endl;
+  }, [=](std::exception_ptr){
+    std::cout << "on error" << std::endl;
+  }, [=](){
+    std::cout << "on complete" << std::endl;
+    scope_counter::dump();
+  });
+}
+
+/** 再帰が深すぎてクラッシュする */
+void test_2_1() {
+  auto api = std::make_shared<some_api>(1000);
+
+  rxcpp::observable<>::just(unit{})
+  .flat_map([=](unit){
+    return api->call();
+  }).as_dynamic()
+  .map([=](result x){
+    scope_counter sc;
+    if(x == result::failure) throw 0;
+    return unit{};
+  }).as_dynamic()
+  .retry()
+  .take(1)
+  .subscribe([=](unit){
+    std::cout << "on next" << std::endl;
+  }, [=](std::exception_ptr){
+    std::cout << "on error" << std::endl;
+  }, [=](){
+    std::cout << "on complete" << std::endl;
+    scope_counter::dump();
+  });
+}
+
+/** 再帰を抑止する */
+void test_2_2() {
   auto api = std::make_shared<some_api>(1000);
   auto mtx = std::make_shared<std::mutex>();
   mtx->lock();
@@ -189,137 +324,8 @@ void test_1_1() {
   mtx->unlock();
 }
 
-void test_2() {
-  auto api = std::make_shared<some_api>(5);
-  auto sbj = rxcpp::subjects::subject<unit>();
-
-  ready_set_go([=](){
-    sbj.get_subscriber().on_next(unit{});
-  }, sbj.get_observable())
-  .flat_map([=](unit){
-    return api->call();
-  }).as_dynamic()
-  .flat_map([=](result x){
-    scope_counter sc;
-    if(x == result::failure){
-      sbj.get_subscriber().on_next(unit{});
-      return rxcpp::observable<>::never<unit>().as_dynamic();
-    }
-    else{
-      sbj.get_subscriber().on_completed();
-      return rxcpp::observable<>::just(unit{}).as_dynamic();
-    }
-  }).as_dynamic()
-  .subscribe([=](unit){
-    std::cout << "on next" << std::endl;
-  }, [=](std::exception_ptr){
-    std::cout << "on error" << std::endl;
-  }, [=](){
-    std::cout << "on complete" << std::endl;
-    scope_counter::dump();
-  });
-}
-
+/** 引き金を引いてから仕掛けるパターン（取りこぼしする） */
 void test_3_1() {
-  auto api = std::make_shared<some_api>(5);
-  auto sbj = rxcpp::subjects::subject<unit>();
-
-  sbj.get_observable()
-  .flat_map([=](unit){
-    return api->call();
-  }).as_dynamic()
-  .flat_map([=](result x){
-    return rxcpp::observable<>::create<unit>([=](rxcpp::subscriber<unit> s){
-      scope_counter sc;
-      if(x == result::failure){
-        sbj.get_subscriber().on_next(unit{});
-        s.on_completed();
-      }
-      else {
-        s.on_next(unit{});
-        s.on_completed();
-        sbj.get_subscriber().on_completed();
-      }
-    });
-  }).as_dynamic()
-  .subscribe([=](unit){
-    std::cout << "on next" << std::endl;
-  }, [=](std::exception_ptr){
-    std::cout << "on error" << std::endl;
-  }, [=](){
-    std::cout << "on complete" << std::endl;
-    scope_counter::dump();
-  });
-
-  sbj.get_subscriber().on_next(unit{});
-}
-
-void test_3_2() {
-  auto api = std::make_shared<some_api>(5);
-  auto sbj = rxcpp::subjects::behavior<unit>(unit{});
-
-  rxcpp::observable<>::range(0)
-  .zip(sbj.get_observable())
-  .flat_map([=](std::tuple<int, unit>){
-    return api->call();
-  }).as_dynamic()
-  .tap([=](result x){
-    if(x == result::failure){
-      sbj.get_subscriber().on_next(unit{});
-    }
-    else{
-      sbj.get_subscriber().on_completed();
-    }
-  })
-  .skip_while([=](result x){
-    return x == result::failure;
-  }).as_dynamic()
-  .take(1)
-  .subscribe([=](result){
-    std::cout << "on next" << std::endl;
-  }, [=](std::exception_ptr){
-    std::cout << "on error" << std::endl;
-  }, [=](){
-    std::cout << "on complete" << std::endl;
-    scope_counter::dump();
-  });
-}
-
-void test_3_3() {
-  auto api = std::make_shared<some_api>(5);
-  auto sbj = rxcpp::subjects::subject<unit>();
-
-  ready_set_go([=](){
-    sbj.get_subscriber().on_next(unit{});
-  }, sbj.get_observable())
-  .flat_map([=](unit){
-    return api->call();
-  }).as_dynamic()
-  .flat_map([=](result x){
-    return rxcpp::observable<>::create<unit>([=](rxcpp::subscriber<unit> s){
-      scope_counter sc;
-      if(x == result::failure){
-        sbj.get_subscriber().on_next(unit{});
-        s.on_completed(); /** 忘れがち！ */
-      }
-      else {
-        s.on_next(unit{});
-        s.on_completed();
-        sbj.get_subscriber().on_completed();
-      }
-    });
-  }).as_dynamic()
-  .subscribe([=](unit){
-    std::cout << "on next" << std::endl;
-  }, [=](std::exception_ptr){
-    std::cout << "on error" << std::endl;
-  }, [=](){
-    std::cout << "on complete" << std::endl;
-    scope_counter::dump();
-  });
-}
-
-void test_4_1() {
   auto fn = [](std::shared_ptr<some_state> state){
     state->start();
     return state->observable();
@@ -341,7 +347,8 @@ void test_4_1() {
   state->end();
 }
 
-void test_4_2() {
+/** 仕掛けてから引き金を引いくパターン（取りこぼさない） */
+void test_3_2() {
   auto fn = [](std::shared_ptr<some_state> state){
     return ready_set_go([state](){
       state->start();
@@ -364,29 +371,37 @@ void test_4_2() {
   state->end();
 }
 
-
 int main() {
-  std::cout << std::endl << "test_1()" << std::endl;
-  test_1();
-
   std::cout << std::endl << "test_1_1()" << std::endl;
   test_1_1();
+  scope_counter::reset();
 
-  std::cout << std::endl << "test_2()" << std::endl;
-  test_2();
+  std::cout << std::endl << "test_1_2()" << std::endl;
+  test_1_2();
+  scope_counter::reset();
+
+  std::cout << std::endl << "test_1_3()" << std::endl;
+  test_1_3();
+  scope_counter::reset();
+
+  std::cout << std::endl << "test_1_4()" << std::endl;
+  test_1_4();
+  scope_counter::reset();
+
+  /** test_2_1() は実行するとクラッシュします */
+  // std::cout << std::endl << "test_2_1()" << std::endl;
+  // test_2_1();
+  // scope_counter::reset();
+
+  std::cout << std::endl << "test_2_2()" << std::endl;
+  test_2_2();
+  scope_counter::reset();
 
   std::cout << std::endl << "test_3_1()" << std::endl;
   test_3_1();
+  scope_counter::reset();
 
   std::cout << std::endl << "test_3_2()" << std::endl;
   test_3_2();
-
-  std::cout << std::endl << "test_3_3()" << std::endl;
-  test_3_3();
-
-  std::cout << std::endl << "test_4_1()" << std::endl;
-  test_4_1();
-
-  std::cout << std::endl << "test_4_2()" << std::endl;
-  test_4_2();
+  scope_counter::reset();
 }
