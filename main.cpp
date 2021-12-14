@@ -185,10 +185,18 @@ void test_1_2() {
       return rxcpp::observable<>::never<unit>().as_dynamic();
     }
     else{
-      sbj.get_subscriber().on_completed();
+      /**
+       * ここで sbj を　complete させるべく
+       * sbj.get_subscriber().on_completed();
+       * を実行しても、この flat_map が never を返却していると、
+       * もはや、全ての observable を complete することが「絶対に不可能」なので、
+       * 適宜、後段で take() することで、前段の購読完了の意思表示をしなければ
+       * subscribe で complete が呼び出されないので注意。
+       **/
       return rxcpp::observable<>::just(unit{}).as_dynamic();
     }
   }).as_dynamic()
+  .take(1) /** 明示的な購読終了の意思表示をしないと、全てが complete しないので注意　*/
   .subscribe([=](unit){
     std::cout << "on next" << std::endl;
   }, [=](std::exception_ptr){
@@ -197,6 +205,11 @@ void test_1_2() {
     std::cout << "on complete" << std::endl;
     scope_counter::dump();
   });
+  /**
+   * ちなみに、 take(1) が無くても、この関数は終了するが
+   * その場合、 subscription は終了していない状態で、この関数を抜けるため
+   * subscription のデストラクタで unsubscribe されているだけということに注意が必要
+   **/
 }
 
 /** 繰り返しで skip_while() を使う */
