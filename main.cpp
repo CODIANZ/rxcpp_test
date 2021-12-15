@@ -111,9 +111,12 @@ public:
   ~some_api() = default;
   auto call() -> rxcpp::observable<result>
   {
-    const int n = --n_;
-    std::cout << "fire: " << n << std::endl;
-    return rxcpp::observable<>::just(n == 0 ? result::success : result::failure, rxcpp::observe_on_new_thread());
+    return rxcpp::observable<>::just(unit{}, rxcpp::observe_on_new_thread())
+    .map([&](unit){
+      const int n = --n_;
+      std::cout << "fire: " << n << std::endl;
+      return n == 0 ? result::success : result::failure;
+    });
   }
 };
 
@@ -125,9 +128,12 @@ public:
   ~some_api_sync() = default;
   auto call() -> rxcpp::observable<result>
   {
-    const int n = --n_;
-    std::cout << "fire: " << n << std::endl;
-    return rxcpp::observable<>::just(n == 0 ? result::success : result::failure);
+    return rxcpp::observable<>::just(unit{})
+    .map([&](unit){
+      const int n = --n_;
+      std::cout << "fire: " << n << std::endl;
+      return n == 0 ? result::success : result::failure;
+    });
   }
 };
 
@@ -161,10 +167,7 @@ public:
 void test_1_1() {
   auto api = std::make_shared<some_api>(5);
 
-  auto sbsc = rxcpp::observable<>::just(unit{})
-  .flat_map([=](unit){
-    return api->call();
-  }).as_dynamic()
+  auto sbsc = api->call()
   .map([=](result x){
     scope_counter sc;
     if(x == result::failure) throw 0;
@@ -307,10 +310,7 @@ void test_1_4() {
 void test_2_1() {
   auto api = std::make_shared<some_api_sync>(1000);
 
-  auto sbsc = rxcpp::observable<>::just(unit{})
-  .flat_map([=](unit){
-    return api->call();
-  }).as_dynamic()
+  auto sbsc = api->call()
   .map([=](result x){
     scope_counter sc;
     if(x == result::failure) throw 0;
@@ -334,11 +334,8 @@ void test_2_1() {
 void test_2_2() {
   auto api = std::make_shared<some_api_sync>(1000);
 
-  auto sbsc = rxcpp::observable<>::just(unit{})
+  auto sbsc = api->call()
   .observe_on(observe_on_async())
-  .flat_map([=](unit){
-    return api->call();
-  }).as_dynamic()
   .map([=](result x){
     scope_counter sc;
     if(x == result::failure) throw 0;
