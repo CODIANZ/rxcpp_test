@@ -306,6 +306,29 @@ void test_1_4() {
   while(sbsc.is_subscribed()) {}
 }
 
+void test_1_5() {
+  rxcpp::observable<>::create<unit>([](rxcpp::subscriber<unit> s){
+    try{
+      some_api api(5);
+      auto results = api.call().as_blocking();
+      while(results.first() == result::failure) {}
+      s.on_next(unit{});
+      s.on_completed();
+    }
+    catch(std::exception& e){
+      s.on_error(std::make_exception_ptr(e));
+    }
+  })
+  .subscribe([=](unit){
+    std::cout << "on next" << std::endl;
+  }, [=](std::exception_ptr){
+    std::cout << "on error" << std::endl;
+  }, [=](){
+    std::cout << "on complete" << std::endl;
+    scope_counter::dump();
+  });
+}
+
 /** 再帰が深すぎてクラッシュする */
 void test_2_1() {
   auto api = std::make_shared<some_api_sync>(1000);
@@ -534,6 +557,10 @@ int main() {
 
   std::cout << std::endl << "test_1_4()" << std::endl;
   test_1_4();
+  scope_counter::reset();
+
+  std::cout << std::endl << "test_1_5()" << std::endl;
+  test_1_5();
   scope_counter::reset();
 
   /** test_2_1() は実行するとクラッシュします */
