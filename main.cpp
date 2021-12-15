@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include <rxcpp/rx.hpp>
 
 /* void的なもの */
@@ -400,6 +401,127 @@ void test_3_2() {
   while(sbsc.is_subscribed()) {}
 }
 
+void test_4_1() {
+  /** 関数の入退出を確認 */
+  struct scope {
+    std::string name_;
+    scope(const std::string& name) : name_(name) {
+      std::cout << "enter:" << name_ << std::endl;
+    }
+    scope(const std::string& name, int n) {
+      std::stringstream ss;
+      ss << name << " (" << n << ")";
+      name_ = ss.str();
+      std::cout << "enter:" << name_ << std::endl;
+    }
+    ~scope() {
+      std::cout << "leave:" << name_ << std::endl;
+    }
+  };
+
+  int counter = 0;  /** fn() 内の observable で活躍するカウンタ */
+
+  /**
+   * subscribe 毎にインクリメントされた値を１個だけ発行する
+   * cold observable を返却する関数
+   **/
+  auto fn = [&counter]() {
+    scope fns("fn()");
+    return rxcpp::observable<>::create<int>([&counter](rxcpp::subscriber<int> s){
+      scope fnos("observable 1st", counter);
+      s.on_next(counter++); /** counter を加算して発行 */
+      s.on_completed();
+    })
+    .flat_map([](int n){
+      scope fns("flat_map");
+      return rxcpp::observable<>::create<int>([n](rxcpp::subscriber<int> s){
+        scope fnos("observable 2nd", n);
+        s.on_next(n); /** 受け取った数値（counter） をそのまま発行 */
+        s.on_completed();
+      });
+    });
+  };
+
+  fn()
+  .map([=](int x){
+    std::cout << x << std::endl;
+    if(x == 2) return unit{}; /** その後 take(1) で終了 */
+    std::cout << "throw" << std::endl;
+    throw 0;  /** retry を誘発 */
+  })
+  .retry()
+  .take(1)
+  .subscribe([=](unit){
+    std::cout << "on next" << std::endl;
+  }, [=](std::exception_ptr){
+    std::cout << "on error" << std::endl;
+  }, [=](){
+    std::cout << "on complete" << std::endl;
+  });
+}
+
+void test_4_2() {
+  /** 関数の入退出を確認 */
+  struct scope {
+    std::string name_;
+    scope(const std::string& name) : name_(name) {
+      std::cout << "enter:" << name_ << std::endl;
+    }
+    scope(const std::string& name, int n) {
+      std::stringstream ss;
+      ss << name << " (" << n << ")";
+      name_ = ss.str();
+      std::cout << "enter:" << name_ << std::endl;
+    }
+    ~scope() {
+      std::cout << "leave:" << name_ << std::endl;
+    }
+  };
+
+  int counter = 0;  /** fn() 内の observable で活躍するカウンタ */
+
+  /**
+   * subscribe 毎にインクリメントされた値を１個だけ発行する
+   * cold observable を返却する関数
+   **/
+  auto fn = [&counter]() {
+    scope fns("fn()");
+    return rxcpp::observable<>::create<int>([&counter](rxcpp::subscriber<int> s){
+      scope fnos("observable 1st", counter);
+      s.on_next(counter++); /** counter を加算して発行 */
+      s.on_completed();
+    })
+    .flat_map([](int n){
+      scope fns("flat_map");
+      return rxcpp::observable<>::create<int>([n](rxcpp::subscriber<int> s){
+        scope fnos("observable 2nd", n);
+        s.on_next(n); /** 受け取った数値（counter） をそのまま発行 */
+        s.on_completed();
+      });
+    });
+  };
+
+  auto sbsc = fn()
+  .observe_on(rxcpp::observe_on_new_thread())
+  .map([=](int x){
+    std::cout << x << std::endl;
+    if(x == 2) return unit{}; /** その後 take(1) で終了 */
+    std::cout << "throw" << std::endl;
+    throw 0;  /** retry を誘発 */
+  })
+  .retry()
+  .take(1)
+  .subscribe([=](unit){
+    std::cout << "on next" << std::endl;
+  }, [=](std::exception_ptr){
+    std::cout << "on error" << std::endl;
+  }, [=](){
+    std::cout << "on complete" << std::endl;
+  });
+
+  while(sbsc.is_subscribed()) {}
+}
+
 int main() {
   std::cout << std::endl << "test_1_1()" << std::endl;
   test_1_1();
@@ -432,5 +554,13 @@ int main() {
 
   std::cout << std::endl << "test_3_2()" << std::endl;
   test_3_2();
+  scope_counter::reset();
+
+  std::cout << std::endl << "test_4_1()" << std::endl;
+  test_4_1();
+  scope_counter::reset();
+
+  std::cout << std::endl << "test_4_2()" << std::endl;
+  test_4_2();
   scope_counter::reset();
 }
