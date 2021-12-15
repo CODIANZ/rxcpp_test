@@ -112,6 +112,20 @@ public:
   {
     const int n = --n_;
     std::cout << "fire: " << n << std::endl;
+    return rxcpp::observable<>::just(n == 0 ? result::success : result::failure, rxcpp::observe_on_new_thread());
+  }
+};
+
+class some_api_sync {
+private:
+  std::atomic_int n_;
+public:
+  some_api_sync(int n) : n_(n) {}
+  ~some_api_sync() = default;
+  auto call() -> rxcpp::observable<result>
+  {
+    const int n = --n_;
+    std::cout << "fire: " << n << std::endl;
     return rxcpp::observable<>::just(n == 0 ? result::success : result::failure);
   }
 };
@@ -146,7 +160,7 @@ public:
 void test_1_1() {
   auto api = std::make_shared<some_api>(5);
 
-  rxcpp::observable<>::just(unit{})
+  auto sbsc = rxcpp::observable<>::just(unit{})
   .flat_map([=](unit){
     return api->call();
   }).as_dynamic()
@@ -165,6 +179,8 @@ void test_1_1() {
     std::cout << "on complete" << std::endl;
     scope_counter::dump();
   });
+
+  while(sbsc.is_subscribed()) {}
 }
 
 /** 繰り返しで never() を使う */
@@ -172,7 +188,7 @@ void test_1_2() {
   auto api = std::make_shared<some_api>(5);
   auto sbj = rxcpp::subjects::subject<unit>();
 
-  ready_set_go([=](){
+  auto sbsc = ready_set_go([=](){
     sbj.get_subscriber().on_next(unit{});
   }, sbj.get_observable())
   .flat_map([=](unit){
@@ -210,16 +226,19 @@ void test_1_2() {
    * その場合、 subscription は終了していない状態で、この関数を抜けるため
    * subscription のデストラクタで unsubscribe されているだけということに注意が必要
    **/
+
+  while(sbsc.is_subscribed()) {}
 }
 
 /** 繰り返しで skip_while() を使う */
 void test_1_3() {
   auto api = std::make_shared<some_api>(5);
-  auto sbj = rxcpp::subjects::behavior<unit>(unit{});
+  auto sbj = rxcpp::subjects::subject<unit>();
 
-  rxcpp::observable<>::range(0)
-  .zip(sbj.get_observable())
-  .flat_map([=](std::tuple<int, unit>){
+  auto sbsc = ready_set_go([=](){
+    sbj.get_subscriber().on_next(unit{});
+  }, sbj.get_observable())
+  .flat_map([=](unit){
     return api->call();
   }).as_dynamic()
   .tap([=](result x){
@@ -242,6 +261,8 @@ void test_1_3() {
     std::cout << "on complete" << std::endl;
     scope_counter::dump();
   });
+
+  while(sbsc.is_subscribed()) {}
 }
 
 /** 繰り返しで observable を作成する */
@@ -249,7 +270,7 @@ void test_1_4() {
   auto api = std::make_shared<some_api>(5);
   auto sbj = rxcpp::subjects::subject<unit>();
 
-  ready_set_go([=](){
+  auto sbsc = ready_set_go([=](){
     sbj.get_subscriber().on_next(unit{});
   }, sbj.get_observable())
   .flat_map([=](unit){
@@ -277,13 +298,15 @@ void test_1_4() {
     std::cout << "on complete" << std::endl;
     scope_counter::dump();
   });
+
+  while(sbsc.is_subscribed()) {}
 }
 
 /** 再帰が深すぎてクラッシュする */
 void test_2_1() {
-  auto api = std::make_shared<some_api>(1000);
+  auto api = std::make_shared<some_api_sync>(1000);
 
-  rxcpp::observable<>::just(unit{})
+  auto sbsc = rxcpp::observable<>::just(unit{})
   .flat_map([=](unit){
     return api->call();
   }).as_dynamic()
@@ -302,15 +325,15 @@ void test_2_1() {
     std::cout << "on complete" << std::endl;
     scope_counter::dump();
   });
+
+  while(sbsc.is_subscribed()) {}
 }
 
 /** 再帰を抑止する */
 void test_2_2() {
-  auto api = std::make_shared<some_api>(1000);
-  auto mtx = std::make_shared<std::mutex>();
-  mtx->lock();
+  auto api = std::make_shared<some_api_sync>(1000);
 
-  rxcpp::observable<>::just(unit{})
+  auto sbsc = rxcpp::observable<>::just(unit{})
   .observe_on(observe_on_async())
   .flat_map([=](unit){
     return api->call();
@@ -326,15 +349,12 @@ void test_2_2() {
     std::cout << "on next" << std::endl;
   }, [=](std::exception_ptr){
     std::cout << "on error" << std::endl;
-    mtx->unlock();
   }, [=](){
     std::cout << "on complete" << std::endl;
     scope_counter::dump();
-    mtx->unlock();
   });
 
-  mtx->lock();
-  mtx->unlock();
+  while(sbsc.is_subscribed()) {}
 }
 
 /** 引き金を引いてから仕掛けるパターン（取りこぼしする） */
@@ -345,19 +365,17 @@ void test_3_1() {
   };
 
   auto state = std::make_shared<some_state>();
-  auto mtx = std::make_shared<std::mutex>();
-  mtx->lock();
-  fn(state)
+
+  auto sbsc = fn(state)
   .take(5)
   .subscribe([=](int n){
     std::cout << n << std::endl;
   }, [](std::exception_ptr){
   }, [=](){
-    mtx->unlock();
   });
-  mtx->lock();
-  mtx->unlock();
   state->end();
+
+  while(sbsc.is_subscribed()) {}
 }
 
 /** 仕掛けてから引き金を引いくパターン（取りこぼさない） */
@@ -368,20 +386,18 @@ void test_3_2() {
     }, state->observable());
   };
 
-  auto mtx = std::make_shared<std::mutex>();
   auto state = std::make_shared<some_state>();
-  mtx->lock();
-  fn(state)
+
+  auto sbsc = fn(state)
   .take(5)
   .subscribe([=](int n){
     std::cout << n << std::endl;
   }, [](std::exception_ptr){
   }, [=](){
-    mtx->unlock();
   });
-  mtx->lock();
-  mtx->unlock();
   state->end();
+
+  while(sbsc.is_subscribed()) {}
 }
 
 int main() {
