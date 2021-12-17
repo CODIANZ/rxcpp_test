@@ -4,7 +4,13 @@ project(rxcpp_test VERSION 0.1.0)
 include(CTest)
 enable_testing()
 
-add_executable(rxcpp_test main.cpp)
+file(GLOB sources
+  ./src/test/*.cpp
+  ./src/tools/*.cpp
+  ./src/*.cpp
+)
+
+add_executable(rxcpp_test ${sources})
 
 set(CMAKE_CXX_FLAGS "-std=c++14")
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
