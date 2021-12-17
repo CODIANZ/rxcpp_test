@@ -4,6 +4,7 @@
 #include "test/test_4.h"
 #include "test/test_5.h"
 #include "test/test_6.h"
+#include "test/test_7.h"
 
 int main() {
   test_1();
@@ -12,4 +13,5 @@ int main() {
   test_4();
   test_5();
   test_6();
+  test_7();
 }
