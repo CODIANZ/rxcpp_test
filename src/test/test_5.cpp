@@ -104,13 +104,13 @@ void test_5_3()
         return rxcpp::observable<>::just(unit{})
         .observe_on(rxcpp::observe_on_new_thread())
         .flat_map([=](unit){
-          std::cout << std::this_thread::get_id() << " : " << x << " : wait for get mutex" << std::endl;
+          std::cout << std::this_thread::get_id() << " : " << x << " : wait for get semaphore" << std::endl;
           mtx->lock();
           std::cout << std::this_thread::get_id() << " : " << x << " : throw" << std::endl;
           return rxcpp::observable<>::error<int>(std::make_exception_ptr(std::exception()));
         }).as_dynamic();
       }
-      std::cout << std::this_thread::get_id() << " : " << x << " : unlock mutex" << std::endl;
+      std::cout << std::this_thread::get_id() << " : " << x << " : unlock semaphore" << std::endl;
       mtx->unlock();
       std::this_thread::yield();
       std::cout << std::this_thread::get_id() << " : " << x << " : emit" << std::endl;
@@ -151,7 +151,7 @@ void test_5_4()
   for(auto i = 1;; i++){
     std::cout << std::endl << "========== " << i << "==========" << std::endl; 
     auto count = std::make_shared<std::atomic_int>(0);
-    auto mtx = std::make_shared<std::mutex>();
+    auto mtx = std::make_shared<sem<1>>();
     auto sbsc = rxcpp::observable<>::interval(std::chrono::milliseconds(100), rxcpp::observe_on_new_thread())
     .observe_on(rxcpp::observe_on_new_thread())
     .flat_map([=](int x){
@@ -161,13 +161,13 @@ void test_5_4()
         return rxcpp::observable<>::just(unit{})
         .observe_on(rxcpp::observe_on_new_thread())
         .flat_map([=](unit){
-          std::cout << std::this_thread::get_id() << " : " << x << " : wait for get mutex" << std::endl;
+          std::cout << std::this_thread::get_id() << " : " << x << " : wait for get semaphore" << std::endl;
           mtx->lock();
           std::cout << std::this_thread::get_id() << " : " << x << " : emit" << std::endl;
           return rxcpp::observable<>::just(x).as_dynamic();
         }).as_dynamic();
       }
-      std::cout << std::this_thread::get_id() << " : " << x << " : unlock mutex" << std::endl;
+      std::cout << std::this_thread::get_id() << " : " << x << " : unlock semaphore" << std::endl;
       mtx->unlock();
       std::this_thread::yield();
       std::cout << std::this_thread::get_id() << " : " << x << " : emit" << std::endl;
