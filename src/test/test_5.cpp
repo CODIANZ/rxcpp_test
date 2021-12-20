@@ -3,6 +3,7 @@
 #include <iostream>
 #include "../tools/some_api.h"
 #include "../tools/unit.h"
+#include "../tools/sem.h"
 
 /** take(1) 通過後に上流でエラーが発生した場合 */
 void test_5_1()
@@ -93,7 +94,7 @@ void test_5_3()
   for(auto i = 1;; i++){
     std::cout << std::endl << "========== " << i << "==========" << std::endl; 
     auto count = std::make_shared<std::atomic_int>(0);
-    auto mtx = std::make_shared<std::mutex>();
+    auto mtx = std::make_shared<sem<1>>();
     auto sbsc = rxcpp::observable<>::interval(std::chrono::milliseconds(100), rxcpp::observe_on_new_thread())
     .observe_on(rxcpp::observe_on_new_thread())
     .flat_map([=](int x){
