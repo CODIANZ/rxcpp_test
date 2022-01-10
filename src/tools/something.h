@@ -1,7 +1,7 @@
 #if !defined(__h_something__)
 #define __h_something__
 
-#include <rxcpp/rx.hpp>
+#include "common.h"
 
 template<typename T = void> class something;
 

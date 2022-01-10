@@ -1,7 +1,7 @@
 #if !defined(__h_some_api__)
 #define __h_some_api__
 
-#include <rxcpp/rx.hpp>
+#include "common.h"
 #include "unit.h"
 
 /* some_api を call() した時の結果 */

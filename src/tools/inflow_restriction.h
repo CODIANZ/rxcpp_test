@@ -1,7 +1,7 @@
 #if !defined(__h_inflow_restriction__)
 #define __h_inflow_restriction__
 
-#include <rxcpp/rx.hpp>
+#include "common.h"
 #include "../tools/sem.h"
 
 template <int N>

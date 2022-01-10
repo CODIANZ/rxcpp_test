@@ -1,7 +1,9 @@
 #if !defined(__h_async_scheduler__)
 #define __h_async_scheduler__
 
-#include <rxcpp/rx.hpp>
+#include "common.h"
+
+#if !defined(USE_ANOTHER_RXCPP)
 
 /** 簡単なスケジューラ例 （std::async を使ってみる） */
 class async_scheduler : public rxcpp::schedulers::scheduler_interface {
@@ -41,5 +43,13 @@ public:
 rxcpp::observe_on_one_worker observe_on_async() {
   return rxcpp::observe_on_one_worker(rxcpp::schedulers::make_scheduler<async_scheduler>());
 }
+
+#else
+
+inline auto observe_on_async() {
+  return another_rxcpp::schedulers::async_scheduler();
+}
+
+#endif
 
 #endif /* !defined(__h_async_scheduler__) */

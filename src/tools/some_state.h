@@ -1,7 +1,7 @@
 #if !defined(__h_some_state__)
 #define __h_some_state__
 
-#include <rxcpp/rx.hpp>
+#include "common.h"
 
 /** 
  * startで hot observable が値発行を開始する
@@ -13,7 +13,9 @@ private:
   rxcpp::subscription sbs_;
 public:
   some_state() = default;
-  ~some_state() = default;
+  ~some_state() {
+    end();
+  }
   auto observable() { return sbj_.get_observable(); }
   void start(){
     sbj_.get_subscriber().on_next(0);

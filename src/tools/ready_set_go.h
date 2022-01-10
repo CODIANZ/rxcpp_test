@@ -1,7 +1,7 @@
 #if !defined(__h_ready_set_go__)
 #define __h_ready_set_go__
 
-#include <rxcpp/rx.hpp>
+#include "common.h"
 
 /** o を subscribe した後、 f() を呼び出す。 o が発行した値を観測可能な observable を返却する。 */
 template <typename T> rxcpp::observable<T> ready_set_go(std::function<void()> f, rxcpp::observable<T> o) {

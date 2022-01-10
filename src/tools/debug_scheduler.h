@@ -1,7 +1,9 @@
 #if !defined(__h_debug_scheduler__)
 #define __h_debug_scheduler__
 
-#include <rxcpp/rx.hpp>
+#include "common.h"
+
+#if !defined(USE_ANOTHER_RXCPP)
 
 /** デバッグ用のスケジューラ */
 class debug_scheduler : public rxcpp::schedulers::scheduler_interface {
@@ -42,5 +44,42 @@ public:
 rxcpp::observe_on_one_worker observe_on_debug(const std::string& name) {
   return rxcpp::observe_on_one_worker(rxcpp::schedulers::make_scheduler<debug_scheduler>(name));
 }
+
+#else
+
+class debug_scheduler_interface : public another_rxcpp::scheduler_interface {
+private:
+  const std::string m_name;
+
+public:
+  debug_scheduler_interface(const std::string& name) :
+    scheduler_interface(schedule_type::direct),
+    m_name(name) {}
+  virtual ~debug_scheduler_interface() = default;
+
+  virtual void run(call_in_context_fn_t call_in_context) override {
+    call_in_context();
+  }
+
+  virtual void detach() override {
+  }
+
+  virtual void schedule(function_type f) override {
+    std::cout << "[[schedule]] " << m_name << " {" << std::endl;
+    f();
+    std::cout << "[[schedule]] " << m_name << " }" << std::endl;
+  }
+};
+
+inline auto observe_on_debug(const std::string& name) {
+  return [name]{
+    return another_rxcpp::scheduler(
+      std::make_shared<debug_scheduler_interface>(name)
+    );
+  };
+}
+
+
+#endif
 
 #endif /* !defined(__h_debug_scheduler__) */

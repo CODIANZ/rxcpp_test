@@ -18,3 +18,4 @@ set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
 
 include_directories(./rxcpp/Rx/v2/src)
+include_directories(./another-rxcpp/include)

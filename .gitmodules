@@ -1,3 +1,6 @@
 [submodule "rxcpp"]
 	path = rxcpp
 	url = https://github.com/ReactiveX/RxCpp.git
+[submodule "another-rxcpp"]
+	path = another-rxcpp
+	url = https://github.com/CODIANZ/another-rxcpp.git
