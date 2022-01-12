@@ -1,7 +1,7 @@
 #if !defined(__h_rx__)
 #define __h_rx__
 
-#if 1
+#if 0
   #include <rxcpp/rx.hpp>
 #else
   #define USE_ANOTHER_RXCPP
