@@ -52,26 +52,26 @@ private:
   const std::string m_name;
 
 public:
-  debug_scheduler_interface(const std::string& name) :
+  debug_scheduler_interface(const std::string& name) noexcept :
     scheduler_interface(schedule_type::direct),
     m_name(name) {}
   virtual ~debug_scheduler_interface() = default;
 
-  virtual void run(call_in_context_fn_t call_in_context) override {
+  virtual void run(call_in_context_fn_t call_in_context) noexcept override {
     call_in_context();
   }
 
-  virtual void detach() override {
+  virtual void detach() noexcept override {
   }
 
-  virtual void schedule(function_type f) override {
+  virtual void schedule(const function_type& f) noexcept override {
     std::cout << "[[schedule]] " << m_name << " {" << std::endl;
     f();
     std::cout << "[[schedule]] " << m_name << " }" << std::endl;
   }
 };
 
-inline auto observe_on_debug(const std::string& name) {
+inline auto observe_on_debug(const std::string& name) noexcept {
   return [name]{
     return another_rxcpp::scheduler(
       std::make_shared<debug_scheduler_interface>(name)

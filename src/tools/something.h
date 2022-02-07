@@ -13,7 +13,7 @@ public:
     throw retry_trigger{};
   }
   template<typename T, typename TT = typename std::remove_reference<T>::type>
-  static something<TT> success(T&& v) {
+  static something<TT> success(T v) {
     return something<TT>(
       rxcpp::observable<>::just(std::forward<T>(v))
     );
